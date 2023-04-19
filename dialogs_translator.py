@@ -318,23 +318,28 @@ def translate_neatly_common_events(
 
 
 # usage: python dialogs_translator.py --print_neatly --source_lang it --dest_lang en
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("-i", "--input_folder", type=str, default="dialogs")
-    ap.add_argument("-sl", "--source_lang", type=str, default="it")
-    ap.add_argument("-dl", "--dest_lang", type=str, default="en")
-    ap.add_argument("-v", "--verbose", action="store_true", default=False)
-    ap.add_argument("-nf", "--no_format", action="store_true", default=False)
-    ap.add_argument("-pn", "--print_neatly", action="store_true", default=False)
-    ap.add_argument("-ml", "--max_len", type=int, default=44)
-    ap.add_argument("-mr", "--max_retries", type=int, default=10)
-    args = ap.parse_args()
-    dest_folder = args.input_folder + "_" + args.dest_lang
+def new_argpraser() -> argparse.ArgumentParser:
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("-i", "--input_folder", type=str, default="dialogs")
+    argparser.add_argument("-sl", "--source_lang", type=str, default="it")
+    argparser.add_argument("-dl", "--dest_lang", type=str, default="en")
+    argparser.add_argument("-v", "--verbose", action="store_true", default=False)
+    argparser.add_argument("-nf", "--no_format", action="store_true", default=False)
+    argparser.add_argument("-pn", "--print_neatly", action="store_true", default=False)
+    argparser.add_argument("-ml", "--max_len", type=int, default=44)
+    argparser.add_argument("-mr", "--max_retries", type=int, default=10)
+    return argparser
+
+
+def main():
+    argparser = new_argpraser()
+    arguments = argparser.parse_args()
+    dest_folder = arguments.input_folder + "_" + arguments.dest_lang
     translations = 0
     if not os.path.exists(dest_folder):
         os.makedirs(dest_folder)
-    for file in os.listdir(args.input_folder):
-        file_path = os.path.join(args.input_folder, file)
+    for file in os.listdir(arguments.input_folder):
+        file_path = os.path.join(arguments.input_folder, file)
         if os.path.isfile(os.path.join(dest_folder, file)):
             print(
                 "skipped file {} because it has already been translated".format(
@@ -345,40 +350,44 @@ if __name__ == "__main__":
         if file.endswith(".json"):
             print("translating file: {}".format(file_path))
             if file.startswith("Map"):
-                if args.print_neatly:
+                if arguments.print_neatly:
                     new_data, t = translate_neatly(
                         file_path,
                         tr=Translator(),
-                        max_len=args.max_len,
-                        src=args.source_lang,
-                        dst=args.dest_lang,
-                        verbose=args.verbose,
-                        max_retries=args.max_retries,
+                        max_len=arguments.max_len,
+                        src=arguments.source_lang,
+                        dst=arguments.dest_lang,
+                        verbose=arguments.verbose,
+                        max_retries=arguments.max_retries,
                     )
                 else:
                     new_data, t = translate(
                         file_path,
                         tr=Translator(),
-                        src=args.source_lang,
-                        dst=args.dest_lang,
-                        verbose=args.verbose,
-                        max_retries=args.max_retries,
+                        src=arguments.source_lang,
+                        dst=arguments.dest_lang,
+                        verbose=arguments.verbose,
+                        max_retries=arguments.max_retries,
                     )
             elif file.startswith("CommonEvents"):
                 new_data, t = translate_neatly_common_events(
                     file_path,
                     tr=Translator(),
-                    max_len=args.max_len,
-                    src=args.source_lang,
-                    dst=args.dest_lang,
-                    verbose=args.verbose,
-                    max_retries=args.max_retries,
+                    max_len=arguments.max_len,
+                    src=arguments.source_lang,
+                    dst=arguments.dest_lang,
+                    verbose=arguments.verbose,
+                    max_retries=arguments.max_retries,
                 )
             translations += t
             new_file = os.path.join(dest_folder, file)
             with open(new_file, "w", encoding="utf-8") as f:
-                if not args.no_format:
+                if not arguments.no_format:
                     json.dump(new_data, f, indent=4, ensure_ascii=False)
                 else:
                     json.dump(new_data, f, ensure_ascii=False)
     print("\ndone! translated in total {} dialog windows".format(translations))
+
+
+if __name__ == "__main__":
+    main()
