@@ -1,5 +1,6 @@
 import argparse
 import copy
+from dataclasses import dataclass
 import json
 import os
 import sys
@@ -10,29 +11,45 @@ from googletrans import Translator  # pip install googletrans==4.0.0rc1
 from print_neatly import print_neatly
 
 
+@dataclass
+class TranslatorData:
+    api: Translator
+    source_language: str
+    destination_language: str
+
+
+def translate_sentence(input_text: str, translator_data: TranslatorData) -> str:
+    translated_text: str = translator_data.api.translate(
+        input_text,
+        src=translator_data.source_language,
+        dest=translator_data.destination_language,
+    ).text
+    if (
+        input_text[0].isalpha()
+        and translated_text[0].isalpha
+        and not input_text[0].isupper()
+    ):
+        translated_text = translated_text[0].lower() + translated_text[1:]
+    return translated_text
+
+
+def try_translate_sentence(
+    input_text: str, translator_data: TranslatorData, max_retries_number: int
+) -> tuple[str, bool]:
+    try:
+        return (translate_sentence(input_text, translator_data), True)
+    except Exception:
+        for _ in range(max_retries_number):
+            try:
+                time.sleep(1)
+                return (translate_sentence(input_text, translator_data), True)
+            except Exception:
+                pass
+        return (input_text, False)
+
+
 def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
-    def translate_sentence(text):
-        target = text
-        translation = tr.translate(target, src=src, dest=dst).text
-        if target[0].isalpha() and translation[0].isalpha and not target[0].isupper():
-            translation = translation[0].lower() + translation[1:]
-        text = translation
-        if verbose:
-            print(target, "->", translation)
-        return text
-
-    def try_translate_sentence(text):
-        try:
-            return (translate_sentence(text), True)
-        except:
-            for _ in range(max_retries):
-                try:
-                    time.sleep(1)
-                    return (translate_sentence(text), True)
-                except:
-                    pass
-            return (text, False)
-
+    translator_data = TranslatorData(tr, src, dst)
     translations = 0
     with open(file_path, "r", encoding="utf-8-sig") as datafile:
         data = json.load(datafile)
@@ -51,9 +68,12 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
                         if not list["parameters"][0]:
                             continue
                         # translate
-                        list["parameters"][0], success = try_translate_sentence(
-                            list["parameters"][0]
+                        translated_text, success = try_translate_sentence(
+                            list["parameters"][0], translator_data, max_retries
                         )
+                        if verbose and success:
+                            print(list["parameters"][0], "->", translated_text)
+                        list["parameters"][0] = translated_text
                         if not success:
                             print(
                                 "Anomaly plain text: {}".format(list["parameters"][0])
@@ -72,9 +92,12 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
                             if not choice:
                                 continue
                             # translate
-                            list["parameters"][0][j], success = try_translate_sentence(
-                                choice
+                            translated_text, success = try_translate_sentence(
+                                choice, translator_data, max_retries
                             )
+                            if verbose and success:
+                                print(list["parameters"][0][j], "->", translated_text)
+                            list["parameters"][0][j] = translated_text
                             if not success:
                                 print("Anomaly choices: {}".format(choice))
                             else:
@@ -91,9 +114,12 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
                             )
                             continue
                         # translate
-                        list["parameters"][1], success = try_translate_sentence(
-                            list["parameters"][1]
+                        translated_text, success = try_translate_sentence(
+                            list["parameters"][1], translator_data, max_retries
                         )
+                        if verbose and success:
+                            print(list["parameters"][1], "->", translated_text)
+                        list["parameters"][1] = translated_text
                         if not success:
                             print(
                                 "Anomaly choices (answer): {}".format(
