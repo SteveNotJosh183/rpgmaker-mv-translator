@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import time
+from typing import Any
 
 from googletrans import Translator  # pip install googletrans==4.0.0rc1
 
@@ -48,89 +49,98 @@ def try_translate_sentence(
         return (input_text, False)
 
 
+def load_json(file_path: str) -> Any:
+    with open(file_path, "r", encoding="utf-8-sig") as datafile:
+        return json.load(datafile)
+
+
+def get_dialogs(event: dict) -> list[dict]:
+    dialogs = []
+    for page in event["pages"]:
+        for element in page["list"]:
+            dialogs.append(element)
+    return dialogs
+
+
+# WIP: improve readability and reduce function size
 def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
     translator_data = TranslatorData(tr, src, dst)
     translations = 0
-    with open(file_path, "r", encoding="utf-8-sig") as datafile:
-        data = json.load(datafile)
-    num_events = len([e for e in data["events"] if e is not None])
-    i = 0
-    for events in data["events"]:
-        if events is not None:
-            print("{}: {}/{}".format(file_path, i + 1, num_events))
-            i += 1
-            for pages in events["pages"]:
-                for list in pages["list"]:
+    translation_data = load_json(file_path)
+    to_translate_events = [
+        event for event in translation_data["events"] if event is not None
+    ]
+    for index, event in enumerate(to_translate_events):
+        print("{}: {}/{}".format(file_path, index + 1, len(to_translate_events)))
 
-                    # Plain text (ex: ["plain text"])
-                    if list["code"] == 401:
-                        # null or empty string check
-                        if not list["parameters"][0]:
-                            continue
-                        # translate
-                        translated_text, success = try_translate_sentence(
-                            list["parameters"][0], translator_data, max_retries
+        dialogs = get_dialogs(event)
+        for dialog in dialogs:
+            # Plain text (ex: ["plain text"])
+            if dialog["code"] == 401:
+                # null or empty string check
+                if not dialog["parameters"][0]:
+                    continue
+                # translate
+                translated_text, success = try_translate_sentence(
+                    dialog["parameters"][0], translator_data, max_retries
+                )
+                if verbose and success:
+                    print(dialog["parameters"][0], "->", translated_text)
+                dialog["parameters"][0] = translated_text
+                if not success:
+                    print("Anomaly plain text: {}".format(dialog["parameters"][0]))
+                else:
+                    translations += 1
+
+            # Choices (ex: [["yes", "no"], 1, 0, 2, 0])
+            elif dialog["code"] == 102:
+                # null or empty list check
+                if not dialog["parameters"][0]:
+                    continue
+                # translate list
+                for j, choice in enumerate(dialog["parameters"][0]):
+                    # null or empty string check
+                    if not choice:
+                        continue
+                    # translate
+                    translated_text, success = try_translate_sentence(
+                        choice, translator_data, max_retries
+                    )
+                    if verbose and success:
+                        print(dialog["parameters"][0][j], "->", translated_text)
+                    dialog["parameters"][0][j] = translated_text
+                    if not success:
+                        print("Anomaly choices: {}".format(choice))
+                    else:
+                        translations += 1
+
+            # Choices (answer) (ex: [0, "yes"])
+            elif dialog["code"] == 402:
+                # invalid length null or empty string check
+                if len(dialog["parameters"]) != 2 or not dialog["parameters"][1]:
+                    print(
+                        "Anomaly choices (answer) - Unexpected 402 Code: {}".format(
+                            dialog["parameters"]
                         )
-                        if verbose and success:
-                            print(list["parameters"][0], "->", translated_text)
-                        list["parameters"][0] = translated_text
-                        if not success:
-                            print(
-                                "Anomaly plain text: {}".format(list["parameters"][0])
-                            )
-                        else:
-                            translations += 1
-
-                    # Choices (ex: [["yes", "no"], 1, 0, 2, 0])
-                    elif list["code"] == 102:
-                        # null or empty list check
-                        if not list["parameters"][0]:
-                            continue
-                        # translate list
-                        for j, choice in enumerate(list["parameters"][0]):
-                            # null or empty string check
-                            if not choice:
-                                continue
-                            # translate
-                            translated_text, success = try_translate_sentence(
-                                choice, translator_data, max_retries
-                            )
-                            if verbose and success:
-                                print(list["parameters"][0][j], "->", translated_text)
-                            list["parameters"][0][j] = translated_text
-                            if not success:
-                                print("Anomaly choices: {}".format(choice))
-                            else:
-                                translations += 1
-
-                    # Choices (answer) (ex: [0, "yes"])
-                    elif list["code"] == 402:
-                        # invalid length null or empty string check
-                        if len(list["parameters"]) != 2 or not list["parameters"][1]:
-                            print(
-                                "Anomaly choices (answer) - Unexpected 402 Code: {}".format(
-                                    list["parameters"]
-                                )
-                            )
-                            continue
-                        # translate
-                        translated_text, success = try_translate_sentence(
-                            list["parameters"][1], translator_data, max_retries
-                        )
-                        if verbose and success:
-                            print(list["parameters"][1], "->", translated_text)
-                        list["parameters"][1] = translated_text
-                        if not success:
-                            print(
-                                "Anomaly choices (answer): {}".format(
-                                    list["parameters"][1]
-                                )
-                            )
-                        else:
-                            translations += 1
-    return data, translations
+                    )
+                    continue
+                # translate
+                translated_text, success = try_translate_sentence(
+                    dialog["parameters"][1], translator_data, max_retries
+                )
+                if verbose and success:
+                    print(dialog["parameters"][1], "->", translated_text)
+                dialog["parameters"][1] = translated_text
+                if not success:
+                    print(
+                        "Anomaly choices (answer): {}".format(dialog["parameters"][1])
+                    )
+                else:
+                    translations += 1
+    return translation_data, translations
 
 
+# TODO: refactor this
 def translate_neatly(
     file_path, tr, src="it", dst="en", verbose=False, max_len=40, max_retries=5
 ):
@@ -267,6 +277,7 @@ def translate_neatly(
     return data, translations
 
 
+# TODO: refactor this
 def translate_neatly_common_events(
     file_path, tr, src="it", dst="en", verbose=False, max_len=55, max_retries=5
 ):
@@ -357,7 +368,7 @@ def new_argpraser() -> argparse.ArgumentParser:
     return argparser
 
 
-def main():
+def main() -> None:
     argparser = new_argpraser()
     arguments = argparser.parse_args()
     dest_folder = arguments.input_folder + "_" + arguments.dest_lang
