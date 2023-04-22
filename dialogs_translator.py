@@ -5,7 +5,7 @@ import json
 import os
 import sys
 import time
-from typing import Any
+from typing import Any, Optional
 
 from googletrans import Translator  # pip install googletrans==4.0.0rc1
 
@@ -36,17 +36,13 @@ def translate_sentence(input_text: str, translator_data: TranslatorData) -> str:
 
 def try_translate_sentence(
     input_text: str, translator_data: TranslatorData, max_retries_number: int
-) -> tuple[str, bool]:
-    try:
-        return (translate_sentence(input_text, translator_data), True)
-    except Exception:
-        for _ in range(max_retries_number):
-            try:
-                time.sleep(1)
-                return (translate_sentence(input_text, translator_data), True)
-            except Exception:
-                pass
-        return (input_text, False)
+) -> Optional[str]:
+    for _ in range(max_retries_number + 1):
+        try:
+            return translate_sentence(input_text, translator_data)
+        except Exception:
+            time.sleep(1)
+    return
 
 
 def load_json(file_path: str) -> Any:
@@ -70,21 +66,19 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
     to_translate_events = [
         event for event in translation_data["events"] if event is not None
     ]
-    for index, event in enumerate(to_translate_events):
-        print("{}: {}/{}".format(file_path, index + 1, len(to_translate_events)))
+    for event_index, event in enumerate(to_translate_events):
+        print("{}: {}/{}".format(file_path, event_index + 1, len(to_translate_events)))
 
         dialogs = get_dialogs(event)
         for dialog in dialogs:
             # Plain text (ex: ["plain text"])
             if dialog["code"] == 401:
-                # null or empty string check
                 if not dialog["parameters"][0]:
                     continue
-                # translate
-                translated_text, success = try_translate_sentence(
+                translated_text = try_translate_sentence(
                     dialog["parameters"][0], translator_data, max_retries
                 )
-                if not success:
+                if translated_text is None:
                     print("Anomaly plain text: {}".format(dialog["parameters"][0]))
                     continue
                 if verbose:
@@ -94,24 +88,22 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
 
             # Choices (ex: [["yes", "no"], 1, 0, 2, 0])
             elif dialog["code"] == 102:
-                # null or empty list check
                 if not dialog["parameters"][0]:
                     continue
-                # translate list
-                for j, choice in enumerate(dialog["parameters"][0]):
-                    # null or empty string check
+                for choice_index, choice in enumerate(dialog["parameters"][0]):
                     if not choice:
                         continue
-                    # translate
-                    translated_text, success = try_translate_sentence(
+                    translated_text = try_translate_sentence(
                         choice, translator_data, max_retries
                     )
-                    if not success:
+                    if translated_text is None:
                         print("Anomaly choices: {}".format(choice))
                         continue
                     if verbose:
-                        print(dialog["parameters"][0][j], "->", translated_text)
-                    dialog["parameters"][0][j] = translated_text
+                        print(
+                            dialog["parameters"][0][choice_index], "->", translated_text
+                        )
+                    dialog["parameters"][0][choice_index] = translated_text
                     translated_dialog_number += 1
 
             # Choices (answer) (ex: [0, "yes"])
@@ -124,11 +116,10 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
                         )
                     )
                     continue
-                # translate
-                translated_text, success = try_translate_sentence(
+                translated_text = try_translate_sentence(
                     dialog["parameters"][1], translator_data, max_retries
                 )
-                if not success:
+                if translated_text is None:
                     print(
                         "Anomaly choices (answer): {}".format(dialog["parameters"][1])
                     )
