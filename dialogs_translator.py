@@ -19,19 +19,19 @@ class TranslatorData:
     destination_language: str
 
 
-def translate_sentence(input_text: str, translator_data: TranslatorData) -> str:
+def translate_sentence(text: str, translator_data: TranslatorData) -> str:
     translated_text: str = translator_data.api.translate(
-        input_text,
+        text,
         src=translator_data.source_language,
         dest=translator_data.destination_language,
     ).text
-    if (
-        input_text[0].isalpha()
-        and translated_text[0].isalpha
-        and not input_text[0].isupper()
-    ):
-        translated_text = translated_text[0].lower() + translated_text[1:]
     return translated_text
+
+
+def reformat_translated_text(original: str, translated: str) -> str:
+    if original[0].isalpha() and translated[0].isalpha and not original[0].isupper():
+        return translated[0].lower() + translated[1:]
+    return translated
 
 
 def try_translate_sentence(
@@ -75,15 +75,18 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
             if dialog["code"] == 401:
                 if not dialog["parameters"][0]:
                     continue
+                original_text = dialog["parameters"][0]
                 translated_text = try_translate_sentence(
-                    dialog["parameters"][0], translator_data, max_retries
+                    original_text, translator_data, max_retries
                 )
                 if translated_text is None:
-                    print("Anomaly plain text: {}".format(dialog["parameters"][0]))
+                    print("Anomaly plain text: {}".format(original_text))
                     continue
                 if verbose:
-                    print(dialog["parameters"][0], "->", translated_text)
-                dialog["parameters"][0] = translated_text
+                    print(original_text, "->", translated_text)
+                dialog["parameters"][0] = reformat_translated_text(
+                    original_text, translated_text
+                )
                 translated_dialog_number += 1
 
             # Choices (ex: [["yes", "no"], 1, 0, 2, 0])
@@ -100,10 +103,10 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
                         print("Anomaly choices: {}".format(choice))
                         continue
                     if verbose:
-                        print(
-                            dialog["parameters"][0][choice_index], "->", translated_text
-                        )
-                    dialog["parameters"][0][choice_index] = translated_text
+                        print(choice, "->", translated_text)
+                    dialog["parameters"][0][choice_index] = reformat_translated_text(
+                        choice, translated_text
+                    )
                     translated_dialog_number += 1
 
             # Choices (answer) (ex: [0, "yes"])
@@ -116,17 +119,18 @@ def translate(file_path, tr, src="it", dst="en", verbose=False, max_retries=5):
                         )
                     )
                     continue
+                choice = dialog["parameters"][1]
                 translated_text = try_translate_sentence(
-                    dialog["parameters"][1], translator_data, max_retries
+                    choice, translator_data, max_retries
                 )
                 if translated_text is None:
-                    print(
-                        "Anomaly choices (answer): {}".format(dialog["parameters"][1])
-                    )
+                    print("Anomaly choices (answer): {}".format(choice))
                     continue
                 if verbose:
-                    print(dialog["parameters"][1], "->", translated_text)
-                dialog["parameters"][1] = translated_text
+                    print(choice, "->", translated_text)
+                dialog["parameters"][1] = reformat_translated_text(
+                    choice, translated_text
+                )
                 translated_dialog_number += 1
     return translation_data, translated_dialog_number
 
