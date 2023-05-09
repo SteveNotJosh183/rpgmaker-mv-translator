@@ -97,11 +97,11 @@ def main() -> None:
         print("translating file: {}".format(file_name))
 
         if file_name.startswith("Map") and arguments.print_neatly:
+            pass
+        elif file_name.startswith("Map"):
             total_translated_dialog += normal_translate(
                 data, translator, arguments.verbose
             )
-        elif file_name.startswith("Map"):
-            pass
         elif file_name.startswith("CommonEvents"):
             pass
         translated_file_path = os.path.join(translated_folder, file_name)

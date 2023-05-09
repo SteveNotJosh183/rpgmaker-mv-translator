@@ -19,7 +19,7 @@ class Translator:
 
     def translate(self, text: str) -> str:
         return self.api.translate(
-            text, self.source_language, self.destination_language
+            text, src=self.source_language, dest=self.destination_language
         ).text
 
     def try_translate(self, text: str) -> Optional[str]:

@@ -80,12 +80,12 @@ def validate_choice_answer(dialog: dict) -> Optional[dict]:
 
 
 @curry(2)
-def translate(text: str, translator: Translator) -> Optional[str]:
+def translate(translator: Translator, text: str) -> Optional[str]:
     return translator.try_translate(text)
 
 
 @curry(2)
-def reformat_translated_text(translated: str, original: str) -> str:
+def reformat_translated_text(original: str, translated: str) -> str:
     if original[0].isalpha() and translated[0].isalpha and not original[0].isupper():
         return translated[0].lower() + translated[1:]
     return translated
