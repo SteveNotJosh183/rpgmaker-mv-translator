@@ -1,6 +1,7 @@
 from typing import Optional
 from pymonad.maybe import Maybe
 from pymonad.tools import curry
+from print_neatly import print_neatly
 
 from translator import Translator
 
@@ -59,6 +60,25 @@ def choice_answer_process(dialog: dict, translator: Translator, verbose: bool) -
     return 1
 
 
+def neatly_plain_text_process(
+    dialog: dict, translator: Translator, verbose: bool, max_line_length: int
+) -> int:
+    translated_text: Maybe = (
+        Maybe.insert(dialog).then(extract_plain_text).then(translate(translator))
+    )
+    if translated_text.is_nothing():
+        print("Anomaly plain text: {}".format(extract_plain_text(dialog)))
+        return 0
+    if verbose:
+        print("Plain text(401): {} -> {}".format(*translator.get_last_translation()))
+    dialog["parameters"][0] = (
+        translated_text.then(reformat_translated_text(extract_plain_text(dialog)))
+        .then(auto_wrap_line(max_line_length))
+        .maybe(extract_plain_text(dialog), lambda x: x)
+    )
+    return 1
+
+
 def extract_choice_list(dialog: dict) -> list[str]:
     return dialog["parameters"][0]
 
@@ -77,6 +97,14 @@ def validate_choice_answer(dialog: dict) -> Optional[dict]:
     if not dialog["parameters"][1]:
         return
     return dialog
+
+
+@curry(2)
+def auto_wrap_line(max_line_length: int, text: str) -> Optional[str]:
+    try:
+        return "\n".join(print_neatly(text, max_line_length))
+    except Exception:
+        return
 
 
 @curry(2)

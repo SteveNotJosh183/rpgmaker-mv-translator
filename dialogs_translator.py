@@ -7,9 +7,13 @@ import googletrans
 from dialog_types import (
     choice_answer_process,
     multiple_choice_process,
+    neatly_plain_text_process,
     plain_text_process,
 )
 from translator import Translator
+
+MAX_RETRIES = 10
+MAX_LINE_LENGTH = 44
 
 
 # usage: python dialogs_translator.py --print_neatly --source_lang it --dest_lang en
@@ -21,8 +25,8 @@ def new_argpraser() -> argparse.ArgumentParser:
     argparser.add_argument("-v", "--verbose", action="store_true", default=False)
     argparser.add_argument("-nf", "--no_format", action="store_true", default=False)
     argparser.add_argument("-pn", "--print_neatly", action="store_true", default=False)
-    argparser.add_argument("-ml", "--max_len", type=int, default=44)
-    argparser.add_argument("-mr", "--max_retries", type=int, default=10)
+    argparser.add_argument("-ml", "--max_len", type=int, default=MAX_LINE_LENGTH)
+    argparser.add_argument("-mr", "--max_retries", type=int, default=MAX_RETRIES)
     return argparser
 
 
@@ -48,26 +52,54 @@ def dialogs_query(event: dict) -> Generator[dict, dict, None]:
 def event_translation(
     data: dict,
     translator: Translator,
-    verbose: bool,
-    translation_type: Callable[[dict, Translator, bool], int],
+    translation_type: Callable[[dict, Translator], int],
+    *args,
+    **kwargs
 ) -> int:
     to_translate_events = [event for event in data["events"] if event is not None]
     total_translated_dialog = 0
     for event_index, event in enumerate(to_translate_events):
         print("{}/{} events".format(event_index + 1, len(to_translate_events)))
         for dialog in dialogs_query(event):
-            total_translated_dialog += translation_type(dialog, translator, verbose)
+            total_translated_dialog += translation_type(
+                dialog, translator, *args, **kwargs
+            )
     return total_translated_dialog
 
 
-def normal_translation(dialog: dict, translator: Translator, verbose: bool) -> int:
+def normal_translation(dialog: dict, translator: Translator, *args, **kwargs) -> int:
     code = dialog["code"]
+    verbose = kwargs.get("verbose", False)
     if code == 102:
         return multiple_choice_process(dialog, translator, verbose)
     if code == 401:
         return plain_text_process(dialog, translator, verbose)
     if code == 402:
         return choice_answer_process(dialog, translator, verbose)
+    return 0
+
+
+def neatly_translation(dialog: dict, translator: Translator, *args, **kwargs) -> int:
+    code = dialog["code"]
+    verbose = kwargs.get("verbose", False)
+    max_line_length = kwargs.get("max_line_length", MAX_LINE_LENGTH)
+    if code == 102:
+        return multiple_choice_process(dialog, translator, verbose)
+    if code == 401:
+        return neatly_plain_text_process(dialog, translator, verbose, max_line_length)
+    if code == 402:
+        return choice_answer_process(dialog, translator, verbose)
+    return 0
+
+
+def common_event_translation(
+    dialog: dict, translator: Translator, *args, **kwargs
+) -> int:
+    code = dialog["code"]
+    verbose = kwargs.get("verbose", False)
+    max_line_length = kwargs.get("max_line_length", MAX_LINE_LENGTH)
+    if code == 401:
+        return neatly_plain_text_process(dialog, translator, verbose, max_line_length)
     return 0
 
 
@@ -101,13 +133,21 @@ def main() -> None:
         print("translating file: {}".format(file_name))
 
         if file_name.startswith("Map") and arguments.print_neatly:
-            pass
+            translation_type = neatly_translation
         elif file_name.startswith("Map"):
-            total_translated_dialog += event_translation(
-                data, translator, arguments.verbose, normal_translation
-            )
+            translation_type = normal_translation
         elif file_name.startswith("CommonEvents"):
-            pass
+            translation_type = common_event_translation
+        else:
+            continue
+
+        total_translated_dialog += event_translation(
+            data,
+            translator,
+            translation_type,
+            verbose=arguments.verbose,
+            max_line_length=arguments.max_len,
+        )
         translated_file_path = os.path.join(translated_folder, file_name)
         dump_json(data, translated_file_path, arguments.no_format)
     print(
