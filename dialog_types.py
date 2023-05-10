@@ -116,7 +116,9 @@ def translate(translator: Translator, text: str) -> Optional[str]:
     text_codes = get_text_codes(text)
     if text_codes is None:
         return translator.try_translate(text)
-    translated_text = translator.translate(replace_text_code(text))
+    translated_text = translator.try_translate(replace_text_code(text))
+    if translated_text is None:
+        return
     split_text_list = translated_text.split("[0000]")
     formatted_text_list = []
     for index in range(0, len(split_text_list)):
