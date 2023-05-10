@@ -1,7 +1,7 @@
 import argparse
 import os
 import json
-from typing import Any, Generator
+from typing import Any, Callable, Generator
 
 import googletrans
 from dialog_types import (
@@ -45,26 +45,30 @@ def dialogs_query(event: dict) -> Generator[dict, dict, None]:
             yield dialog
 
 
-def normal_translate(data: dict, translator: Translator, verbose: bool) -> int:
+def event_translation(
+    data: dict,
+    translator: Translator,
+    verbose: bool,
+    translation_type: Callable[[dict, Translator, bool], int],
+) -> int:
     to_translate_events = [event for event in data["events"] if event is not None]
     total_translated_dialog = 0
     for event_index, event in enumerate(to_translate_events):
         print("{}/{} events".format(event_index + 1, len(to_translate_events)))
         for dialog in dialogs_query(event):
-            code = dialog["code"]
-            if code == 102:
-                total_translated_dialog += multiple_choice_process(
-                    dialog, translator, verbose
-                )
-            elif code == 401:
-                total_translated_dialog += plain_text_process(
-                    dialog, translator, verbose
-                )
-            elif code == 402:
-                total_translated_dialog += choice_answer_process(
-                    dialog, translator, verbose
-                )
+            total_translated_dialog += translation_type(dialog, translator, verbose)
     return total_translated_dialog
+
+
+def normal_translation(dialog: dict, translator: Translator, verbose: bool) -> int:
+    code = dialog["code"]
+    if code == 102:
+        return multiple_choice_process(dialog, translator, verbose)
+    if code == 401:
+        return plain_text_process(dialog, translator, verbose)
+    if code == 402:
+        return choice_answer_process(dialog, translator, verbose)
+    return 0
 
 
 def main() -> None:
@@ -99,8 +103,8 @@ def main() -> None:
         if file_name.startswith("Map") and arguments.print_neatly:
             pass
         elif file_name.startswith("Map"):
-            total_translated_dialog += normal_translate(
-                data, translator, arguments.verbose
+            total_translated_dialog += event_translation(
+                data, translator, arguments.verbose, normal_translation
             )
         elif file_name.startswith("CommonEvents"):
             pass
