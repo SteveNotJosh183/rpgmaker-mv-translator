@@ -56,7 +56,11 @@ def event_translation(
     *args,
     **kwargs
 ) -> int:
-    to_translate_events = [event for event in data["events"] if event is not None]
+    # Handle special case for CommonEvents file
+    if "events" in data.keys():
+        to_translate_events = [event for event in data["events"] if event is not None]
+    else:
+        to_translate_events = [event for event in data if event is not None]
     total_translated_dialog = 0
     for event_index, event in enumerate(to_translate_events):
         print("{}/{} events".format(event_index + 1, len(to_translate_events)))
