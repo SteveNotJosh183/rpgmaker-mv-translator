@@ -1,9 +1,13 @@
+import re
 from typing import Optional
+import googletrans
 from pymonad.maybe import Maybe
 from pymonad.tools import curry
 from print_neatly import print_neatly
 
 from translator import Translator
+
+PATTERN = r"((\\evalText<<.+>>)|(\\.+[\]}>])|(\\\S+)|(<\w+>))"
 
 
 def plain_text_process(dialog: dict, translator: Translator, verbose: bool) -> int:
@@ -109,7 +113,20 @@ def auto_wrap_line(max_line_length: int, text: str) -> Optional[str]:
 
 @curry(2)
 def translate(translator: Translator, text: str) -> Optional[str]:
-    return translator.try_translate(text)
+    text_codes = get_text_codes(text)
+    if text_codes is None:
+        return translator.try_translate(text)
+    translated_text = translator.translate(replace_text_code(text))
+    split_text_list = translated_text.split("[0000]")
+    formatted_text_list = []
+    for index in range(0, len(split_text_list)):
+        if split_text_list[index] == "" and index < len(text_codes):
+            formatted_text_list.append(text_codes[index])
+            continue
+        formatted_text_list.append(split_text_list[index])
+        if index < len(text_codes):
+            formatted_text_list.append(text_codes[index])
+    return "".join(formatted_text_list)
 
 
 @curry(2)
@@ -117,3 +134,30 @@ def reformat_translated_text(original: str, translated: str) -> str:
     if original[0].isalpha() and translated[0].isalpha and not original[0].isupper():
         return translated[0].lower() + translated[1:]
     return translated
+
+
+def get_text_codes(text: str) -> list[str]:
+    return [group[0] for group in re.findall(PATTERN, text)]
+
+
+def replace_text_code(text: str) -> str:
+    return re.sub(PATTERN, "[0000]", text)
+
+
+def main() -> None:
+    translator = Translator(googletrans.Translator(), "en", "vi")
+    with open("test.txt", "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    translated_text = ""
+    for index, line in enumerate(lines):
+        print(f"translating {index}/{len(lines)} lines")
+        new_line = translate(translator, line)
+        translated_text += new_line + "\n"
+        print(f"{line} -> {new_line}")
+    print("Finished translation")
+    with open("translated.txt", "w", encoding="utf-8") as f:
+        f.write(translated_text)
+
+
+if __name__ == "__main__":
+    main()
