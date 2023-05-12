@@ -1,9 +1,11 @@
 import time
-from typing import Optional, Protocol
+from typing import Optional, Protocol, Union
 
 
 class Translator_API(Protocol):
-    def translate(self, text, scr, dest, *args, **kwargs):
+    def translate(
+        self, text: Union[str, list[str]], scr: str, dest: str, *args, **kwargs
+    ):
         ...
 
 
@@ -17,12 +19,14 @@ class Translator:
         self.max_retries = max_retries
         self.last_translation: Optional[tuple[str, str]] = None
 
-    def translate(self, text: str) -> str:
+    def translate(self, text: Union[str, list[str]]) -> Union[str, list[str]]:
         return self.api.translate(
             text, src=self.source_language, dest=self.destination_language
         ).text
 
-    def try_translate(self, text: str) -> Optional[str]:
+    def try_translate(
+        self, text: Union[str, list[str]]
+    ) -> Optional[Union[str, list[str]]]:
         for _ in range(self.max_retries + 1):
             try:
                 translated_text = self.translate(text)
@@ -35,5 +39,7 @@ class Translator:
                 time.sleep(1)
         return
 
-    def get_last_translation(self) -> Optional[tuple[str, str]]:
+    def get_last_translation(
+        self,
+    ) -> Optional[tuple[Union[str, list[str]], Union[str, list[str]]]]:
         return self.last_translation
