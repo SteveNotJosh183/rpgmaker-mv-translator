@@ -1,44 +1,32 @@
 import argparse
 import json
 import os
-import time
 
 from googletrans import Translator  # pip install googletrans==4.0.0rc1
 
+from dialog_types import reformat_translated_text
+from dialog_types import translate as new_translate
 from print_neatly import print_neatly
+from translator import Translator as NewTranslator
 
 
 def translate(
     file_path, tr, src="it", dst="en", verbose=False, max_retries=5, max_len=55
 ):
-    def translate_sentence(text):
-        target = text
-        translation = tr.translate(target, src=src, dest=dst).text
-        if target[0].isalpha() and translation[0].isalpha and not target[0].isupper():
-            translation = translation[0].lower() + translation[1:]
-        text = translation
-        if verbose:
-            print(target, "->", translation)
-        return text
+    # TEMPORARY: for testing only
+    translator = NewTranslator(tr, src, dst, max_retries)
 
     def translate_and_check(text, remove_escape=True, neatly=False, keep_space=True):
         text_tr = None
         if remove_escape:
             text = text.replace("\n", " ")
-        try:
-            text_tr = translate_sentence(text)
-        except:
-            for _ in range(max_retries):
-                try:
-                    time.sleep(1)
-                    text_tr = translate_sentence(text)
-                except:
-                    pass
-                if text_tr is not None:
-                    break
+        # TEMPORARY: for testing only
+        text_tr = reformat_translated_text(text, new_translate(translator, text))
         if text_tr is None:
             print("Anomaly: {}".format(text))
             return None, 0
+        if verbose:
+            print(text, "->", text_tr)
         if neatly:
             try:
                 text_neat = print_neatly(text_tr, max_len)

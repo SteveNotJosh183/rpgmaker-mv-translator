@@ -1,6 +1,5 @@
 import re
 from typing import Optional
-import googletrans
 from pymonad.maybe import Maybe
 from pymonad.tools import curry
 from print_neatly import print_neatly
@@ -8,6 +7,7 @@ from print_neatly import print_neatly
 from translator import Translator
 
 PATTERN = r"((\\evalText<<.+>>)|(\\.+[\]}>])|(\\\S+)|(<\w+>))"
+CODE_TOKEN = "&*&"
 
 
 def plain_text_process(dialog: dict, translator: Translator, verbose: bool) -> int:
@@ -18,7 +18,11 @@ def plain_text_process(dialog: dict, translator: Translator, verbose: bool) -> i
         print("Anomaly plain text: {}".format(extract_plain_text(dialog)))
         return 0
     if verbose:
-        print("Plain text(401): {} -> {}".format(*translator.get_last_translation()))
+        print(
+            "Plain text(401): {} -> {}".format(
+                extract_plain_text(dialog), translated_text.value
+            )
+        )
     dialog["parameters"][0] = translated_text.then(
         reformat_translated_text(extract_plain_text(dialog))
     ).maybe(extract_plain_text(dialog), lambda x: x)
@@ -33,7 +37,7 @@ def multiple_choice_process(dialog: dict, translator: Translator, verbose: bool)
             print("Anomaly choices: {}".format(choice))
             continue
         if verbose:
-            print("Choice(102): {} -> {}".format(*translator.get_last_translation()))
+            print("Choice(102): {} -> {}".format(choice, translated_text.value))
         dialog["parameters"][0][index] = translated_text.then(
             reformat_translated_text(choice)
         ).maybe(choice, lambda x: x)
@@ -50,16 +54,20 @@ def choice_answer_process(dialog: dict, translator: Translator, verbose: bool) -
             )
         )
         return 0
-    translated_text: Maybe = validated_dialog.then(extraxt_choice_answer).then(
+    translated_text: Maybe = validated_dialog.then(extract_choice_answer).then(
         translate(translator)
     )
     if translated_text.is_nothing():
-        print("Anomaly choices (answer): {}".format(extraxt_choice_answer(dialog)))
+        print("Anomaly choices (answer): {}".format(extract_choice_answer(dialog)))
         return 0
     if verbose:
-        print("Choice answer(402): {} -> {}".format(*translator.get_last_translation()))
+        print(
+            "Choice answer(402): {} -> {}".format(
+                extract_choice_answer(dialog), translated_text.value
+            )
+        )
     dialog["parameters"][1] = translated_text.then(
-        reformat_translated_text(extraxt_choice_answer(dialog))
+        reformat_translated_text(extract_choice_answer(dialog))
     ).maybe(extract_plain_text(dialog), lambda x: x)
     return 1
 
@@ -74,7 +82,11 @@ def neatly_plain_text_process(
         print("Anomaly plain text: {}".format(extract_plain_text(dialog)))
         return 0
     if verbose:
-        print("Plain text(401): {} -> {}".format(*translator.get_last_translation()))
+        print(
+            "Plain text(401): {} -> {}".format(
+                extract_plain_text(dialog), translated_text.value
+            )
+        )
     dialog["parameters"][0] = (
         translated_text.then(reformat_translated_text(extract_plain_text(dialog)))
         .then(auto_wrap_line(max_line_length))
@@ -91,7 +103,7 @@ def extract_plain_text(dialog: dict) -> Optional[str]:
     return dialog["parameters"][0]
 
 
-def extraxt_choice_answer(dialog: dict) -> Optional[str]:
+def extract_choice_answer(dialog: dict) -> Optional[str]:
     return dialog["parameters"][1]
 
 
@@ -119,7 +131,7 @@ def translate(translator: Translator, text: str) -> Optional[str]:
     translated_text = translator.try_translate(replace_text_code(text))
     if translated_text is None:
         return
-    split_text_list = translated_text.split("[0000]")
+    split_text_list = translated_text.split(CODE_TOKEN)
     formatted_text_list = []
     for index in range(0, len(split_text_list)):
         if split_text_list[index] == "" and index < len(text_codes):
@@ -133,6 +145,8 @@ def translate(translator: Translator, text: str) -> Optional[str]:
 
 @curry(2)
 def reformat_translated_text(original: str, translated: str) -> str:
+    if (not (original or translated)) or original is None:
+        return
     if original[0].isalpha() and translated[0].isalpha and not original[0].isupper():
         return translated[0].lower() + translated[1:]
     return translated
@@ -143,23 +157,4 @@ def get_text_codes(text: str) -> list[str]:
 
 
 def replace_text_code(text: str) -> str:
-    return re.sub(PATTERN, "[0000]", text)
-
-
-def main() -> None:
-    translator = Translator(googletrans.Translator(), "en", "vi")
-    with open("test.txt", "r", encoding="utf-8") as f:
-        lines = f.readlines()
-    translated_text = ""
-    for index, line in enumerate(lines):
-        print(f"translating {index}/{len(lines)} lines")
-        new_line = translate(translator, line)
-        translated_text += new_line + "\n"
-        print(f"{line} -> {new_line}")
-    print("Finished translation")
-    with open("translated.txt", "w", encoding="utf-8") as f:
-        f.write(translated_text)
-
-
-if __name__ == "__main__":
-    main()
+    return re.sub(PATTERN, CODE_TOKEN, text)

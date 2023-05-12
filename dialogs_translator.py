@@ -1,7 +1,7 @@
 import argparse
 import os
 import json
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, Iterable
 
 import googletrans
 from dialog_types import (
@@ -49,22 +49,36 @@ def dialogs_query(event: dict) -> Generator[dict, dict, None]:
             yield dialog
 
 
-def event_translation(
-    data: dict,
+def map_translation(
+    data: Iterable,
     translator: Translator,
     translation_type: Callable[[dict, Translator], int],
     *args,
     **kwargs
 ) -> int:
-    # Handle special case for CommonEvents file
-    if "events" in data.keys():
-        to_translate_events = [event for event in data["events"] if event is not None]
-    else:
-        to_translate_events = [event for event in data if event is not None]
+    to_translate_events = [event for event in data["events"] if event is not None]
     total_translated_dialog = 0
     for event_index, event in enumerate(to_translate_events):
         print("{}/{} events".format(event_index + 1, len(to_translate_events)))
         for dialog in dialogs_query(event):
+            total_translated_dialog += translation_type(
+                dialog, translator, *args, **kwargs
+            )
+    return total_translated_dialog
+
+
+def common_events_translation(
+    data: Iterable,
+    translator: Translator,
+    translation_type: Callable[[dict, Translator], int],
+    *args,
+    **kwargs
+) -> int:
+    to_translate_pages = [page for page in data if page is not None]
+    total_translated_dialog = 0
+    for page_index, page in enumerate(to_translate_pages):
+        print("{}/{} pages".format(page_index + 1, len(to_translate_pages)))
+        for dialog in page["list"]:
             total_translated_dialog += translation_type(
                 dialog, translator, *args, **kwargs
             )
@@ -96,7 +110,7 @@ def neatly_translation(dialog: dict, translator: Translator, *args, **kwargs) ->
     return 0
 
 
-def common_event_translation(
+def normal_common_event_translation(
     dialog: dict, translator: Translator, *args, **kwargs
 ) -> int:
     code = dialog["code"]
@@ -137,21 +151,28 @@ def main() -> None:
         print("translating file: {}".format(file_name))
 
         if file_name.startswith("Map") and arguments.print_neatly:
-            translation_type = neatly_translation
+            total_translated_dialog += map_translation(
+                data,
+                translator,
+                neatly_translation,
+                verbose=arguments.verbose,
+                max_line_length=arguments.max_len,
+            )
         elif file_name.startswith("Map"):
-            translation_type = normal_translation
+            total_translated_dialog += map_translation(
+                data,
+                translator,
+                normal_translation,
+                verbose=arguments.verbose,
+            )
         elif file_name.startswith("CommonEvents"):
-            translation_type = common_event_translation
-        else:
-            continue
-
-        total_translated_dialog += event_translation(
-            data,
-            translator,
-            translation_type,
-            verbose=arguments.verbose,
-            max_line_length=arguments.max_len,
-        )
+            total_translated_dialog += common_events_translation(
+                data,
+                translator,
+                normal_common_event_translation,
+                verbose=arguments.verbose,
+                max_line_length=arguments.max_len,
+            )
         translated_file_path = os.path.join(translated_folder, file_name)
         dump_json(data, translated_file_path, arguments.no_format)
     print(
