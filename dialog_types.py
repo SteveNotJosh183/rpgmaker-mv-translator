@@ -6,13 +6,14 @@ from print_neatly import print_neatly
 
 from translator import Translator
 
-PATTERN = r"((\\evalText<<.+>>)|(\\.+[\]}>])|(\\\S+)|(<\w+>))"
-CODE_TOKEN = "&*&"
+PATTERN = r"\\evalText<<.+>>|\\.+?[\]}>]|\\\S+|<\w+>"
 
 
 def plain_text_process(dialog: dict, translator: Translator, verbose: bool) -> int:
     translated_text: Maybe = (
-        Maybe.insert(dialog).then(extract_plain_text).then(translate(translator))
+        Maybe.insert(dialog)
+        .then(extract_plain_text)
+        .then(keep_text_code_translate(translator))
     )
     if translated_text.is_nothing():
         print("Anomaly plain text: {}".format(extract_plain_text(dialog)))
@@ -76,7 +77,9 @@ def neatly_plain_text_process(
     dialog: dict, translator: Translator, verbose: bool, max_line_length: int
 ) -> int:
     translated_text: Maybe = (
-        Maybe.insert(dialog).then(extract_plain_text).then(translate(translator))
+        Maybe.insert(dialog)
+        .then(extract_plain_text)
+        .then(keep_text_code_translate(translator))
     )
     if translated_text.is_nothing():
         print("Anomaly plain text: {}".format(extract_plain_text(dialog)))
@@ -116,31 +119,30 @@ def validate_choice_answer(dialog: dict) -> Optional[dict]:
 
 
 @curry(2)
-def auto_wrap_line(max_line_length: int, text: str) -> Optional[str]:
+def auto_wrap_line(max_line_length: int, text: str) -> str:
     try:
-        return "\n".join(print_neatly(text, max_line_length))
+        return "\n".join(print_neatly(text.replace("\n", " "), max_line_length))
     except Exception:
+        return text
+
+
+@curry(2)
+def keep_text_code_translate(translator: Translator, text: str) -> Optional[str]:
+    text_codes = get_text_codes(text) + [""]
+    splitted_texts = split_text(text)
+    translated_splitted_texts = translator.try_translate_sequence(splitted_texts)
+    if translated_splitted_texts is None:
         return
+    rejoin_text_list = []
+    for text_section, code in zip(translated_splitted_texts, text_codes):
+        rejoin_text_list.append("" if text_section is None else text_section)
+        rejoin_text_list.append(code)
+    return "".join(rejoin_text_list)
 
 
 @curry(2)
 def translate(translator: Translator, text: str) -> Optional[str]:
-    text_codes = get_text_codes(text)
-    if text_codes is None:
-        return translator.try_translate(text)
-    translated_text = translator.try_translate(replace_text_code(text))
-    if translated_text is None:
-        return
-    split_text_list = translated_text.split(CODE_TOKEN)
-    formatted_text_list = []
-    for index in range(0, len(split_text_list)):
-        if split_text_list[index] == "" and index < len(text_codes):
-            formatted_text_list.append(text_codes[index])
-            continue
-        formatted_text_list.append(split_text_list[index])
-        if index < len(text_codes):
-            formatted_text_list.append(text_codes[index])
-    return "".join(formatted_text_list)
+    return translator.try_translate(text)
 
 
 @curry(2)
@@ -153,8 +155,8 @@ def reformat_translated_text(original: str, translated: str) -> str:
 
 
 def get_text_codes(text: str) -> list[str]:
-    return [group[0] for group in re.findall(PATTERN, text)]
+    return re.findall(PATTERN, text)
 
 
-def replace_text_code(text: str) -> str:
-    return re.sub(PATTERN, CODE_TOKEN, text)
+def split_text(text: str) -> list[str]:
+    return re.split(PATTERN, text)
