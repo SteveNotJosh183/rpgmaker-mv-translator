@@ -1,6 +1,6 @@
 import re
 from typing import Optional
-from pymonad.maybe import Maybe
+from pymonad.maybe import Maybe, Nothing
 from pymonad.tools import curry
 from print_neatly import print_neatly
 
@@ -13,6 +13,7 @@ def plain_text_process(dialog: dict, translator: Translator, verbose: bool) -> i
     translated_text: Maybe = (
         Maybe.insert(dialog)
         .then(extract_plain_text)
+        .then(validate_plain_text)
         .then(keep_text_code_translate(translator))
     )
     if translated_text.is_nothing():
@@ -79,6 +80,7 @@ def neatly_plain_text_process(
     translated_text: Maybe = (
         Maybe.insert(dialog)
         .then(extract_plain_text)
+        .then(validate_plain_text)
         .then(keep_text_code_translate(translator))
     )
     if translated_text.is_nothing():
@@ -112,10 +114,16 @@ def extract_choice_answer(dialog: dict) -> Optional[str]:
 
 def validate_choice_answer(dialog: dict) -> Optional[dict]:
     if len(dialog["parameters"]) != 2:
-        return
+        return Nothing
     if not dialog["parameters"][1]:
-        return
+        return Nothing
     return dialog
+
+
+def validate_plain_text(text: str) -> Optional[str]:
+    if not text:
+        return Nothing
+    return text
 
 
 @curry(2)
@@ -129,15 +137,15 @@ def auto_wrap_line(max_line_length: int, text: str) -> str:
 @curry(2)
 def keep_text_code_translate(translator: Translator, text: str) -> Optional[str]:
     text_codes = get_text_codes(text) + [""]
-    splitted_texts = split_text(text)
+    splitted_texts = split_by_text_code(text)
     translated_splitted_texts = translator.try_translate_sequence(splitted_texts)
     if translated_splitted_texts is None:
-        return
+        return Nothing
     rejoin_text_list = []
     for text_section, code in zip(translated_splitted_texts, text_codes):
         rejoin_text_list.append("" if text_section is None else text_section)
         rejoin_text_list.append(code)
-    return "".join(rejoin_text_list)
+    return " ".join(rejoin_text_list)
 
 
 @curry(2)
@@ -147,10 +155,12 @@ def translate(translator: Translator, text: str) -> Optional[str]:
 
 @curry(2)
 def reformat_translated_text(original: str, translated: str) -> str:
-    if (not (original or translated)) or original is None:
-        return
-    if original[0].isalpha() and translated[0].isalpha and not original[0].isupper():
+    if (not original) or original is None:
+        return translated
+    if original.strip()[0].islower() and translated.strip()[0].isalpha():
         return translated[0].lower() + translated[1:]
+    if original.strip()[0].isupper() and translated.strip()[0].isalpha():
+        return translated[0].upper() + translated[1:]
     return translated
 
 
@@ -158,5 +168,5 @@ def get_text_codes(text: str) -> list[str]:
     return re.findall(PATTERN, text)
 
 
-def split_text(text: str) -> list[str]:
+def split_by_text_code(text: str) -> list[str]:
     return re.split(PATTERN, text)
