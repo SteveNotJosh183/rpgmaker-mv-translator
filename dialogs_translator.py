@@ -74,11 +74,11 @@ def common_events_translation(
     *args,
     **kwargs
 ) -> int:
-    to_translate_pages = [page for page in data if page is not None]
+    to_translate_events = [page for page in data if page is not None]
     total_translated_dialog = 0
-    for page_index, page in enumerate(to_translate_pages):
-        print("{}/{} pages".format(page_index + 1, len(to_translate_pages)))
-        for dialog in page["list"]:
+    for event_index, event in enumerate(to_translate_events):
+        print("{}/{} pages".format(event_index + 1, len(to_translate_events)))
+        for dialog in event["list"]:
             total_translated_dialog += translation_type(
                 dialog, translator, *args, **kwargs
             )
