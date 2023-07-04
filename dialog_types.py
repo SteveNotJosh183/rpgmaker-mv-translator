@@ -25,9 +25,12 @@ def plain_text_process(dialog: dict, translator: Translator, verbose: bool) -> i
                 extract_plain_text(dialog), translated_text.value
             )
         )
-    dialog["parameters"][0] = translated_text.then(
+    formatted_text: Maybe = translated_text.then(
         reformat_translated_text(extract_plain_text(dialog))
-    ).maybe(extract_plain_text(dialog), lambda x: x)
+    )
+    if formatted_text.is_nothing():
+        return 0
+    dialog["parameters"][0] = formatted_text.value
     return 1
 
 
@@ -40,9 +43,10 @@ def multiple_choice_process(dialog: dict, translator: Translator, verbose: bool)
             continue
         if verbose:
             print("Choice(102): {} -> {}".format(choice, translated_text.value))
-        dialog["parameters"][0][index] = translated_text.then(
-            reformat_translated_text(choice)
-        ).maybe(choice, lambda x: x)
+        formatted_text: Maybe = translated_text.then(reformat_translated_text(choice))
+        if formatted_text.is_nothing():
+            continue
+        dialog["parameters"][0][index] = formatted_text.value
         translated_dialog_number += 1
     return translated_dialog_number
 
@@ -68,9 +72,12 @@ def choice_answer_process(dialog: dict, translator: Translator, verbose: bool) -
                 extract_choice_answer(dialog), translated_text.value
             )
         )
-    dialog["parameters"][1] = translated_text.then(
+    formatted_text: Maybe = translated_text.then(
         reformat_translated_text(extract_choice_answer(dialog))
-    ).maybe(extract_plain_text(dialog), lambda x: x)
+    )
+    if formatted_text.is_nothing():
+        return 0
+    dialog["parameters"][1] = formatted_text.value
     return 1
 
 
@@ -92,11 +99,12 @@ def neatly_plain_text_process(
                 extract_plain_text(dialog), translated_text.value
             )
         )
-    dialog["parameters"][0] = (
-        translated_text.then(reformat_translated_text(extract_plain_text(dialog)))
-        .then(auto_wrap_line(max_line_length))
-        .maybe(extract_plain_text(dialog), lambda x: x)
-    )
+    formatted_text: Maybe = translated_text.then(
+        reformat_translated_text(extract_plain_text(dialog))
+    ).then(auto_wrap_line(max_line_length))
+    if formatted_text.is_nothing():
+        return 0
+    dialog["parameters"][0] = formatted_text.value
     return 1
 
 
