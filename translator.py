@@ -2,14 +2,14 @@ import time
 from typing import Iterable, Optional, Protocol
 
 
-class Translator_API(Protocol):
+class TranslatorAPI(Protocol):
     def translate(self, text: str, scr: str, dest: str, *args, **kwargs):
         ...
 
 
 class Translator:
     def __init__(
-        self, api: Translator_API, source: str, dest: str, max_retries: int = 3
+        self, api: TranslatorAPI, source: str, dest: str, max_retries: int = 3
     ) -> None:
         self.api = api
         self.source_language = source
