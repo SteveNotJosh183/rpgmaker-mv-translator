@@ -1,191 +1,115 @@
 import argparse
 import json
 import os
+from typing import Any, Callable
 
-from googletrans import Translator  # pip install googletrans==4.0.0rc1
+import googletrans
 
-from dialog_types import reformat_translated_text
-from dialog_types import translate as new_translate
-from print_neatly import print_neatly
-from translator import Translator as NewTranslator
-
-
-def translate(
-    file_path, tr, src="it", dst="en", verbose=False, max_retries=5, max_len=55
-):
-    # TEMPORARY: for testing only
-    translator = NewTranslator(tr, src, dst, max_retries)
-
-    def translate_and_check(text, remove_escape=True, neatly=False, keep_space=True):
-        text_tr = None
-        if remove_escape:
-            text = text.replace("\n", " ")
-        # TEMPORARY: for testing only
-        text_tr = reformat_translated_text(text, new_translate(translator, text))
-        if text_tr is None:
-            print("Anomaly: {}".format(text))
-            return None, 0
-        if verbose:
-            print(text, "->", text_tr)
-        if neatly:
-            try:
-                text_neat = print_neatly(text_tr, max_len)
-                if len(text_neat) > 1:
-                    text_tr = text_neat[0] + "\n" + text_neat[1]
-                else:
-                    text_tr = text_neat[0]
-            except:
-                pass
-        if keep_space:
-            if text[0] == " " and text_tr[0] != " ":
-                text_tr = " " + text_tr
-        return text_tr, 1
-
-    def translate_based_on_keys(
-        dict_or_list,
-        keys,
-        translations=0,
-        remove_escape=True,
-        neatly=False,
-        array_translate=False,
-    ):
-        if isinstance(dict_or_list, dict):
-            for d in dict_or_list:
-                if isinstance(dict_or_list[d], dict) or isinstance(
-                    dict_or_list[d], list
-                ):
-                    translations += translate_based_on_keys(
-                        dict_or_list[d],
-                        keys,
-                        translations,
-                        remove_escape,
-                        neatly,
-                        array_translate,
-                    )
-                elif d in keys and len(dict_or_list[d]) > 0:
-                    tr, success = translate_and_check(
-                        dict_or_list[d], remove_escape, neatly
-                    )
-                    dict_or_list[d] = tr
-                    translations += success
-        elif isinstance(dict_or_list, list):
-            for i in range(len(dict_or_list)):
-                if isinstance(dict_or_list[i], dict) or isinstance(
-                    dict_or_list[i], list
-                ):
-                    translations += translate_based_on_keys(
-                        dict_or_list[i],
-                        keys,
-                        translations,
-                        remove_escape,
-                        neatly,
-                        array_translate,
-                    )
-                elif (
-                    array_translate
-                    and isinstance(dict_or_list[i], str)
-                    and len(dict_or_list[i]) > 0
-                ):
-                    tr, success = translate_and_check(
-                        dict_or_list[i], remove_escape, neatly
-                    )
-                    dict_or_list[i] = tr
-                    translations += success
-        return translations
-
-    translations = 0
-    with open(file_path, "r", encoding="utf-8-sig") as datafile:
-        data = json.load(datafile)
-    num_ids = len([e for e in data if e is not None])
-    i = 0
-
-    if file_path.endswith("GalleryList.json"):
-        translations += translate_based_on_keys(
-            data,
-            ["displayName", "hint", "stageText", "sceneText", "text"],
-            translations,
-        )
-
-    elif file_path.endswith("RubiList.json"):
-        translations += translate_based_on_keys(
-            data, [], translations, array_translate=True
-        )
-
-    else:
-        for d in data:
-            if d is not None:
-                print("{}: {}/{}".format(file_path, i + 1, num_ids))
-                i += 1
-                if "name" in d.keys() and len(d["name"]) > 0:
-                    name_tr, success = translate_and_check(
-                        d["name"], remove_escape=True, neatly=False
-                    )
-                    d["name"] = name_tr
-                    translations += success
-                if "description" in d.keys() and len(d["description"]) > 0:
-                    desc_tr, success = translate_and_check(
-                        d["description"], remove_escape=True, neatly=True
-                    )
-                    d["description"] = desc_tr
-                    translations += success
-                if "profile" in d.keys() and len(d["profile"]) > 0:
-                    prf_tr, success = translate_and_check(
-                        d["profile"], remove_escape=True, neatly=True
-                    )
-                    d["profile"] = prf_tr
-                    translations += success
-                for m in range(1, 5):
-                    message = "message" + str(m)
-                    if message in d.keys() and len(d[message]) > 0:
-                        message_tr, success = translate_and_check(
-                            d[message], remove_escape=False, neatly=False
-                        )
-                        d[message] = message_tr
-                        translations += success
-
-    return data, translations
+from object_types import normal_object_translation
+from translator import Translator
 
 
 # usage: python objects_translator.py --source_lang it --dest_lang en
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("-i", "--input_folder", type=str, default="objects")
-    ap.add_argument("-sl", "--source_lang", type=str, default="it")
-    ap.add_argument("-dl", "--dest_lang", type=str, default="en")
-    ap.add_argument("-v", "--verbose", action="store_true", default=False)
-    ap.add_argument("-nf", "--no_format", action="store_true", default=False)
-    ap.add_argument("-ml", "--max_len", type=int, default=55)
-    ap.add_argument("-mr", "--max_retries", type=int, default=10)
-    args = ap.parse_args()
-    dest_folder = args.input_folder + "_" + args.dest_lang
-    translations = 0
-    if not os.path.exists(dest_folder):
-        os.makedirs(dest_folder)
-    for file in os.listdir(args.input_folder):
-        file_path = os.path.join(args.input_folder, file)
-        if os.path.isfile(os.path.join(dest_folder, file)):
+def new_argpraser() -> argparse.ArgumentParser:
+    argparser = argparse.ArgumentParser()
+    argparser.add_argument("-i", "--input_folder", type=str, default="objects")
+    argparser.add_argument("-sl", "--source_lang", type=str, default="it")
+    argparser.add_argument("-dl", "--dest_lang", type=str, default="en")
+    argparser.add_argument("-v", "--verbose", action="store_true", default=False)
+    argparser.add_argument("-nf", "--no_format", action="store_true", default=False)
+    argparser.add_argument("-ml", "--max_len", type=int, default=55)
+    argparser.add_argument("-mr", "--max_retries", type=int, default=10)
+    return argparser
+
+
+def dump_json(data, file_name, no_format=False) -> None:
+    with open(file_name, "w", encoding="utf-8") as file:
+        if no_format:
+            json.dump(data, file, ensure_ascii=False)
+        else:
+            json.dump(data, file, indent=4, ensure_ascii=False)
+
+
+def load_json(file_path: str) -> Any:
+    with open(file_path, "r", encoding="utf-8-sig") as file:
+        return json.load(file)
+
+
+def object_translation(
+    data: dict,
+    translator: Translator,
+    translation_type: Callable[[dict, Translator], int],
+    *args,
+    **kwargs
+) -> int:
+    total_translated_object = 0
+    to_translated_objects = [element for element in data if element is not None]
+
+    for index, element in enumerate(to_translated_objects):
+        if element is None:
+            continue
+        print("{}/{} objects".format(index + 1, len(to_translated_objects)))
+        total_translated_object += translation_type(
+            element, translator, *args, **kwargs
+        )
+
+    return total_translated_object
+
+
+def main() -> None:
+    argparser = new_argpraser()
+    arguments = argparser.parse_args()
+    translator = Translator(
+        googletrans.Translator(),
+        arguments.source_lang,
+        arguments.dest_lang,
+        arguments.max_retries,
+    )
+    translated_folder = arguments.input_folder + "_" + arguments.dest_lang
+    total_translated_dialog = 0
+    translatable_file_names = [
+        "Actors.json",
+        "Armors.json",
+        "Weapons.json",
+        "Items.json",
+        "Skills.json",
+        "Enemies.json",
+        "MapInfos.json",
+        "Classes.json",
+        "States.json",
+    ]
+    if not os.path.exists(translated_folder):
+        os.makedirs(translated_folder)
+    for file_name in os.listdir(arguments.input_folder):
+        is_traslated_file = os.path.isfile(os.path.join(translated_folder, file_name))
+        if is_traslated_file:
             print(
-                "skipped file {} because it has already been translated".format(
-                    file_path
+                "Skipped file {} because it has already been translated".format(
+                    file_name
                 )
             )
             continue
-        if file.endswith(".json"):
-            print("translating file: {}".format(file_path))
-            new_data, t = translate(
-                file_path,
-                tr=Translator(),
-                max_len=args.max_len,
-                src=args.source_lang,
-                dst=args.dest_lang,
-                verbose=args.verbose,
-                max_retries=args.max_retries,
-            )
-            translations += t
-            new_file = os.path.join(dest_folder, file)
-            with open(new_file, "w", encoding="utf-8") as f:
-                if not args.no_format:
-                    json.dump(new_data, f, indent=4, ensure_ascii=False)
-                else:
-                    json.dump(new_data, f, ensure_ascii=False)
-    print("\ndone! translated in total {} strings".format(translations))
+        if file_name not in translatable_file_names:
+            continue
+
+        file_path = os.path.join(arguments.input_folder, file_name)
+        data = load_json(file_path)
+        print("translating file: {}".format(file_name))
+
+        total_translated_dialog += object_translation(
+            data,
+            translator,
+            normal_object_translation,
+            verbose=arguments.verbose,
+            max_line_length=arguments.max_len,
+        )
+
+        translated_file_path = os.path.join(translated_folder, file_name)
+        dump_json(data, translated_file_path, arguments.no_format)
+    print(
+        "\ndone! translated in total {} dialog windows".format(total_translated_dialog)
+    )
+
+
+if __name__ == "__main__":
+    main()
