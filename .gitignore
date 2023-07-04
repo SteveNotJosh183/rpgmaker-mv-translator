@@ -133,3 +133,6 @@ dialogs_*
 objects_*
 *.zip
 log*.txt
+
+# Visual Studio Code
+.vscode/
