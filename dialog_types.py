@@ -6,7 +6,7 @@ from print_neatly import print_neatly
 
 from translator import Translator
 
-PATTERN = r"\\evalText<<.+>>|\\.+?[\]}>]|\\\S+|<\w+>"
+PATTERN = r"\\evalText<<.+>>|\\\S+[\[{<].+?[\]}>]|\\[^\w\s]|\\\w+|<\w+>"
 
 
 def plain_text_process(dialog: dict, translator: Translator, verbose: bool) -> int:
